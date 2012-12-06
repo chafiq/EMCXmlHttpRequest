@@ -37,7 +37,7 @@ $ php composer.phar update emc/xmlhttprequest-bundle
 If you prefer instead to use git submodules, then run the following:
 
 ``` bash
-$ git submodule add git://github.com/chafiq/EMCXmlHttpRequest.git vendor/bundles/EMC/Bundle/XmlHttpRequestBundle
+$ git submodule add git://github.com/chafiq/EMCXmlHttpRequest.git vendor/emc/xmlhttprequest-bundle/EMC/XmlHttpRequestBundle/
 $ git submodule update --init
 ```
 
