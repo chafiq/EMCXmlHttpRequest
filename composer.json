@@ -1,0 +1,22 @@
+{
+    "name": "emc/xmlhttprequest-bundle",
+    "type": "symfony-bundle",
+    "description": "This bundle gives a unified way to handle and control AJAX requests. For more informations https://github.com/chafiq/EMCXmlHttpRequest/blob/master/README.md",
+    "keywords": ["xmlhttprequest", "ajax"],
+    "licence":"MIT",
+    "homepage":"https://github.com/chafiq/EMCXmlHttpRequest",
+    "issues":"https://github.com/chafiq/EMCXmlHttpRequest/issues",
+    "authors": [
+        {
+            "name": "Chafiq El Mechrafi",
+            "email": "chafiq.elmechrafi@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.2",
+    },
+    "autoload": {
+        "psr-0": { "EMC": "bundles" }
+    },
+    "target-dir": "bundles/EMC/Bundle/XmlHttpRequestBundle",
+}
