@@ -46,7 +46,7 @@ class XmlHttpRequestExtension extends \Twig_Extension
         $method = new \ReflectionMethod($defaults['_controller']);
         
         if (!$annotations = $this->reader->getMethodAnnotations($method)) {
-            return;
+            throw new \Exception('Any XmlHttpRequest annotation found for the method.');
         }
         
         /**
@@ -62,7 +62,7 @@ class XmlHttpRequestExtension extends \Twig_Extension
         
         if ( !$annotation instanceof XmlHttpRequest )
         {
-            return;
+            throw new \Exception('Any XmlHttpRequest annotation found for the method.');
         }
         
         $action = $annotation->getStreaming() ? 'stream' : 'post';

@@ -5,7 +5,10 @@
     "keywords": ["xmlhttprequest", "ajax"],
     "licence":"MIT",
     "homepage":"https://github.com/chafiq/EMCXmlHttpRequest",
-    "issues":"https://github.com/chafiq/EMCXmlHttpRequest/issues",
+    "support": {
+        "issues":"https://github.com/chafiq/EMCXmlHttpRequest/issues"
+    },
+    "minimum-stability":"dev",
     "authors": [
         {
             "name": "Chafiq El Mechrafi",
@@ -16,7 +19,7 @@
         "php": ">=5.3.2",
     },
     "autoload": {
-        "psr-0": { "EMC": "bundles" }
+        "psr-0": { "EMC\\Bundle\\XmlHttpRequestBundle": "" }
     },
-    "target-dir": "bundles/EMC/Bundle/XmlHttpRequestBundle",
+    "target-dir": "EMC/Bundle/XmlHttpRequestBundle",
 }
