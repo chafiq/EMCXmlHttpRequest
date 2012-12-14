@@ -5,7 +5,9 @@ namespace EMC\XmlHttpRequestBundle\Response;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Description of Json
+ * XmlHttpResponse is a related class to the XmlHttpRequest.
+ * It simplify the multi type response ("json", "xml", "text", "csv", ...)
+ * It permit to use mixed response content and stream data with flushing output buffer.
  *
  * @author Chafiq El Mechrafi <chafiq.elmechrafi@gmail.com>
  */
@@ -23,9 +25,18 @@ class XmlHttpResponse extends Response {
      */
     protected $streaming;
     
+	/**
+	 * XmlHttpResponse constructor.
+	 * 
+	 * @see Symfony\Component\HttpFoundation\Response
+	 * 
+	 * @param mixed $content
+	 * @param string $type
+	 * @param bool $streaming
+	 */
     function __construct($content = '', $type='json', $streaming=false)
     {
-        $headers[ 'Content-Type' ] = 'application/json';
+        $headers[ 'Content-Type' ] = self::getContentType($type);
         
         parent::__construct($content, 200, $headers);
         
@@ -53,7 +64,8 @@ class XmlHttpResponse extends Response {
     }
     
     /**
-     * 
+     * This method overide Symfony\Component\HttpFoundation\Response::setContent.
+	 * It permit to set a mixed content.
      * @param mixed $content
      * @return \EMC\XmlHttpRequestBundle\Response\XmlHttpResponse
      * @throws \UnexpectedValueException
@@ -68,14 +80,17 @@ class XmlHttpResponse extends Response {
         return $this;
     }
     
+	/**
+	 * Send content response
+	 * @return \EMC\XmlHttpRequestBundle\Response\XmlHttpResponse
+	 */
     public function sendContent() {
         
-        $content = $this->prepareContent();
+        $content = self::prepareContent($this->getType(), $this->getContent());
         
         if ( $this->getStreaming() )
         {
-            $content = self::streamContent($content);
-            die;
+            self::streamContent($content);
         } else {
             echo $content;
         }
@@ -83,26 +98,60 @@ class XmlHttpResponse extends Response {
         return $this;
     }
     
-    private function prepareContent()
+	/**
+	 * returns the response "string" formated for the $type
+	 * @param string $type
+	 * @param mixed $content
+	 * @return string
+	 * @throws \InvalidArgumentException
+	 */
+    private static function prepareContent($type, $content)
     {
-        switch ($this->getType()) {
+        switch ($type) {
             case 'json' :
-                return json_encode($this->getContent(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+                return json_encode($content, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_FORCE_OBJECT);
 
             default:
                 throw new \InvalidArgumentException('Unreconized or unimplemented response type "' . $type . '"' );
         }
     }
     
+	/**
+	 * returns the content-type related to the $type
+	 * @param string $type
+	 * @return string
+	 * @throws \InvalidArgumentException
+	 */
+	private static function getContentType($type) {
+		switch ($type) {
+            case 'json' :
+                return 'application/json';
+
+            default:
+                throw new \InvalidArgumentException('Unreconized or unimplemented response type "' . $type . '"' );
+        }
+	}
     
+	/**
+	 * This method write the content in the output buffer and flush it.
+	 * It depend to the JS plugin $.stream.
+	 * The final content will be formated as :
+	 * 
+	 * {CONTENT_LENGTH};{CONTENT};
+	 * 
+	 * Note that the CONTENT_LENGTH is >= 513 caracters
+	 * 
+	 * @see http://php.net/manual/en/function.flush.php
+	 * 
+	 * @param string $content
+	 */
     public static function streamContent( $content )
     {
+		ob_start();
         $content = str_pad($content, 512) . PHP_EOL;
         echo strlen($content) . ';' . $content . ';';
         ob_flush();
         flush();
-        
-        return $content;
     }
 
 

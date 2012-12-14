@@ -8,7 +8,7 @@ function EMCXmlHttpRequest() {
     }
 }
 
-EMCXmlHttpRequest.getInstance = function(){
+EMCXmlHttpRequest.getInstance = function() {
     if ( typeof( this._instance ) == "undefined"
         || this._instance === null
         || !( this._instance instanceof EMCXmlHttpRequest )
@@ -23,8 +23,7 @@ EMCXmlHttpRequest.error = function(msg){
     alert(msg);
 };
 
-EMCXmlHttpRequest.prototype.checkResponse = function(response)
-{
+EMCXmlHttpRequest.prototype.checkResponse = function(response) {
     if (    typeof( response ) != "object"
         ||  response == null || typeof(response.code) != "number"
         ||  ( response.code == 0 && typeof(response.data) == "undefined" )
@@ -44,19 +43,20 @@ EMCXmlHttpRequest.prototype.execute = function(response, callback) {
         }
     }
     EMCXmlHttpRequest.error(response.error + (response.code > 1 ? ' (code #' + response.code + ')' : ''));
+	return null;
 };
 
-EMCXmlHttpRequest.prototype.post = function( route, data, dataType, callbackSuccess ) {
+EMCXmlHttpRequest.prototype.post = function( route, data, method, dataType, callback ) {
     var result;
     var that = this;
     var request = $.ajax({
-        type    : 'POST',
+        type    : method,
         url     : route,
         data    : data,
         async   : typeof(callbackSuccess) == "function",
         dataType: dataType,
         success : function(response, textStatus, jqXHR) {
-            result = that.execute(response, callbackSuccess);
+            result = that.execute(response, callback);
         },
         error : function(){
             EMCXmlHttpRequest.error( 'Request Execution Error' );
@@ -67,7 +67,7 @@ EMCXmlHttpRequest.prototype.post = function( route, data, dataType, callbackSucc
 };
 
 
-EMCXmlHttpRequest.prototype.stream = function( route, data, dataType, callbackSuccess ) {
+EMCXmlHttpRequest.prototype.stream = function( route, data, method, dataType, successCallback, streamCallback ) {
     
     var result;
     
@@ -77,15 +77,24 @@ EMCXmlHttpRequest.prototype.stream = function( route, data, dataType, callbackSu
         dataType: dataType,
         enableXDR : true,
         reconnect : false,
-        context: this.$dialog('Enregistrement').get(0),
+		openData : data,
+        context: EMCXmlHttpRequest.getStreamDialog('Enregistrement'),
         message: function(event, stream) {
-            if( typeof( event.data ) == "object" )
-            {
-                if( typeof(event.data.percent) == "number" && typeof(event.data.message) == "string" )
-                {
-                    $(this).trigger('update', event.data);
-                } else {
-                    result = that.execute(event.data, callbackSuccess);
+            if( typeof( event.data ) == "object" ) {
+				if ( typeof( event.data.stream ) == "object" ) {
+					if( typeof(event.data.stream.percent) == "number" && typeof(event.data.stream.message) == "string" ) {
+						$(this).trigger('update', event.data.stream);
+					}
+					
+					if ( "data" in event.data.stream && typeof( streamCallback ) == "function" ) {
+						try {
+							streamCallback( event.data.stream.data );
+						} catch( e ) {
+							EMCXmlHttpRequest.error( 'Streaming Data Error' );
+						}
+					}
+				} else {
+                    result = that.execute(event.data, successCallback);
                 }
             }
             
@@ -101,9 +110,13 @@ EMCXmlHttpRequest.prototype.stream = function( route, data, dataType, callbackSu
     return result;
 };
 
-EMCXmlHttpRequest.prototype.$dialog = function(title) {
+EMCXmlHttpRequest.getStreamDialog = function(title) {
     var dialogClass = 'emc-dialog';
     
+	if ( typeof( $.ui ) != "object" || typeof( $.ui.dialog ) != "function" ) {
+		throw new Error('$.dialog not found');
+	}
+	
     var $dialog =  $(document.createElement('div'))
                         .addClass(dialogClass)
                         .attr('title', title)
@@ -141,5 +154,5 @@ EMCXmlHttpRequest.prototype.$dialog = function(title) {
     
     $dialog.dialog({modal: true});
     
-    return $dialog;
+    return $dialog.get(0);
 };
