@@ -84,16 +84,14 @@ class XmlHttpResponse extends Response {
 	 * Send content response
 	 * @return \EMC\XmlHttpRequestBundle\Response\XmlHttpResponse
 	 */
-    public function sendContent() {
-        
+    public function sendContent()
+	{
         $content = self::prepareContent($this->getType(), $this->getContent());
         
         if ( $this->getStreaming() )
-        {
-            self::streamContent($content);
-        } else {
-            echo $content;
-        }
+			self::streamContent($content);
+        else
+			echo $content;
         
         return $this;
     }
@@ -122,8 +120,10 @@ class XmlHttpResponse extends Response {
 	 * @return string
 	 * @throws \InvalidArgumentException
 	 */
-	private static function getContentType($type) {
-		switch ($type) {
+	private static function getContentType($type)
+	{
+		switch ($type)
+		{
             case 'json' :
                 return 'application/json';
 
@@ -131,7 +131,7 @@ class XmlHttpResponse extends Response {
                 throw new \InvalidArgumentException('Unreconized or unimplemented response type "' . $type . '"' );
         }
 	}
-    
+	
 	/**
 	 * This method write the content in the output buffer and flush it.
 	 * It depend to the JS plugin $.stream.
@@ -152,6 +152,7 @@ class XmlHttpResponse extends Response {
         echo strlen($content) . ';' . $content . ';';
         ob_flush();
         flush();
+		ob_end_clean();
     }
 
 
