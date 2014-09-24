@@ -134,10 +134,6 @@ class XmlHttpResponse extends Response {
 	
 	/**
 	 * This method write the content in the output buffer and flush it.
-	 * It depend to the JS plugin $.stream.
-	 * The final content will be formated as :
-	 * 
-	 * {CONTENT_LENGTH};{CONTENT};
 	 * 
 	 * Note that the CONTENT_LENGTH is >= 513 caracters
 	 * 
@@ -149,7 +145,7 @@ class XmlHttpResponse extends Response {
     {
 		ob_start();
         $content = str_pad($content, 512) . PHP_EOL;
-        echo strlen($content) . ';' . $content . ';';
+        echo $content;
         ob_flush();
         flush();
 		ob_end_clean();
