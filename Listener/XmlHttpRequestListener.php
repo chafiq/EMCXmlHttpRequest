@@ -2,6 +2,7 @@
 
 namespace EMC\XmlHttpRequestBundle\Listener;
 
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent;
@@ -36,7 +37,7 @@ class XmlHttpRequestListener {
      */
     private $annotation;
     
-	/**
+    /**
 	 * XmlHttpRequestListener constructor.
 	 * @param \Doctrine\Common\Annotations\Reader $reader
 	 */
