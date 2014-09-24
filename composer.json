@@ -3,7 +3,7 @@
     "type": "symfony-bundle",
     "description": "This bundle gives a unified way to handle and control AJAX requests. For more informations https://github.com/chafiq/EMCXmlHttpRequest/blob/master/README.md",
     "keywords": ["xmlhttprequest", "ajax"],
-    "licence":"MIT",
+    "license":"MIT",
     "homepage":"https://github.com/chafiq/EMCXmlHttpRequest",
     "support": {
         "issues":"https://github.com/chafiq/EMCXmlHttpRequest/issues"
