@@ -11,7 +11,7 @@ use Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent;
 use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
-use EMC\XmlHttpRequestBundle\Event\StreamingProgress;
+use EMC\XmlHttpRequestBundle\Event\EventStream;
 
 class XmlHttpRequestListenerTest extends WebTestCase
 {
@@ -172,7 +172,7 @@ class XmlHttpRequestListenerTest extends WebTestCase
 		$message = 'test program execution ' . $percent . '% ...';
 		$data = array('mydata' => array(1,2,3), 'otherdata' => 'Just Test Me !', 13 => null);
 		
-		$event = new StreamingProgress($percent, $message , $data);
+		$event = new EventStream($percent, $message , $data);
 
 		$annotation = new XmlHttpRequest(array('streaming'=>true));
 		$this->listener->setAnnotation($annotation);

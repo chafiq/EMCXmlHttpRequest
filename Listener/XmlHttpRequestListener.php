@@ -2,15 +2,13 @@
 
 namespace EMC\XmlHttpRequestBundle\Listener;
 
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
-use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent;
-use Symfony\Component\HttpKernel\Event\FilterControllerEvent;
-use Doctrine\Common\Annotations\Reader;
-use EMC\XmlHttpRequestBundle\Annotation\XmlHttpRequest;
-use EMC\XmlHttpRequestBundle\Event\StreamingProgress;
-use EMC\XmlHttpRequestBundle\Response\XmlHttpResponse;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use EMC\XmlHttpRequestBundle\Event\EventStream;
+use EMC\XmlHttpRequestBundle\Event\EventInfo;
+use Psr\Log\LoggerInterface;
 
 /**
  * XmlHttpRequestListener is an events listener.
@@ -25,97 +23,68 @@ use EMC\XmlHttpRequestBundle\Response\XmlHttpResponse;
  */
 class XmlHttpRequestListener {
 
-	/**
-	 * Reader service (Dependency Injection)
-	 * @var Reader
-	 */
-    private $reader;
-	
+    
     /**
-	 * Annotation set in the controller action
-     * @var XmlHttpRequest
+     * Request Type : will be load from the request hearder X-EMC-XmlHttpRequest.
+     * @var string|null
      */
-    private $annotation;
+    private $requestType;
+    
+    /**
+     * @var array
+     */
+    private $info;
+    
+    /**
+     *
+     * @var LoggerInterface
+     */
+    private $logger;
+    
+    /**
+     * @var boolean
+     */
+    private $displayError;
+
+    /**
+     * @var string
+     */
+    private $delemiter;
+    
+    const HEADER_TAG = 'X-EMC-XmlHttpRequest';
+
+    const EVENT_STREAM = 'emc.xmlhttprequest.stream';
+    const EVENT_INFO = 'emc.xmlhttprequest.info';
     
     /**
 	 * XmlHttpRequestListener constructor.
-	 * @param \Doctrine\Common\Annotations\Reader $reader
 	 */
-    public function __construct(Reader $reader) {
-        $this->reader = $reader;
+    public function __construct(LoggerInterface $logger = null, $displayError) {
+        $this->info = array();
+        $this->requestType = null;
+        $this->logger = $logger;
+        $this->displayError = $displayError;
+        $this->delemiter = '--' . substr(md5(rand(0, 100)), 0, 6) . '--';
     }
     
-	/**
-	 * returns the XmlHttpRequest annotation
-	 * @return XmlHttpRequest
-	 */
-    public function getAnnotation() {
-        return $this->annotation;
-    }
-
-	/**
-	 * Set the XmlHttpRequest annotation
-	 * @param \EMC\XmlHttpRequestBundle\Annotation\XmlHttpRequest $annotation
-	 * @return \EMC\XmlHttpRequestBundle\Listener\XmlHttpRequestListener
-	 */
-    public function setAnnotation(XmlHttpRequest $annotation) {
-        $this->annotation = $annotation;
-		return $this;
+    public function setRequest(RequestStack $requestStack) {
+        $request = $requestStack->getMasterRequest();
+        
+        if ( $request->isXmlHttpRequest() ) {
+            $this->requestType = $request->headers->get(self::HEADER_TAG);
+        }
+        
+        if ( $this->requestType !== null ) {
+            $this->logger->info('Request is handled by XmlHttpRequestListener' );
+        }
     }
     
 	/**
 	 * Returns TRUE if the XmlHttpRequest annotation is set in the controller action. FALSE otherwise
 	 * @return bool
 	 */
-    private function isHandled()
-    {
-        return $this->getAnnotation() instanceof XmlHttpRequest;
-    }
-    
-	/**
-	 * This method is called when the kernel.controller is trigged.
-	 * It try to get the XmlHttpRequest annotation defined in the controller action.
-	 * 
-	 * @param \Symfony\Component\HttpKernel\Event\FilterControllerEvent $event
-	 */
-    public function onCoreController(FilterControllerEvent $event) {
-        
-        if (!is_array($controller = $event->getController())) {
-            return;
-        }
- 
-        $method = new \ReflectionMethod($controller[0], $controller[1]);
-        
-        if (!$annotations = $this->reader->getMethodAnnotations($method)) {
-            return;
-        }
-
-        foreach($annotations as $annotation){
-            if($annotation instanceof XmlHttpRequest) {
-                $this->setAnnotation($annotation);
-            }
-        }
-    }
-    
-	/**
-	 * This method is called when the kernel.view is trigged.
-	 * It sets the an instance of XmlHttpResponse with the controller result
-	 * 
-	 * @param \Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent $event
-	 */
-    public function onKernelView(GetResponseForControllerResultEvent $event)
-    {
-        if ( !$this->isHandled() ) {
-            return;
-        }
-		
-        $event->setResponse(
-            new XmlHttpResponse(
-                $event->getControllerResult(),
-                $this->getAnnotation()->getType(),
-                $this->getAnnotation()->getStreaming()
-            )
-        );
+    private function isHandled($type=null) {
+        return $type ? $this->requestType === $type : $this->requestType !== null;
     }
     
     /**
@@ -125,7 +94,8 @@ class XmlHttpRequestListener {
 	 * The response format is :
 	 * array(
 	 *		'code' => 0, // 0 is the success code value
-	 *		'data' => mixed (controller data)
+	 *		'data' => mixed (controller data),
+     *      'info' => array
 	 * )
 	 * 
 	 * @param \Symfony\Component\HttpKernel\Event\FilterResponseEvent $event
@@ -138,24 +108,31 @@ class XmlHttpRequestListener {
 		
         // Get response content
         $response = $event->getResponse();
-        $content = $response->getContent();
-		
-		/**
-		 * If the response content was already formated -> exit.
-		 */
-        if ( is_array( $content ) && isset( $content[ 'code' ] ) && isset( $content[ 'error' ] ) ) {
+        if (    $response->headers->has(self::HEADER_TAG)
+            ||  ($response->getStatusCode() >= 400 && $response->getStatusCode() !== 500)
+        ) {
             return;
         }
         
-		/**
-		 * @var array formated response content
-		 */
-        $newContent = array(
-            'code' => 0,
-            'data' => $content
-        );
+        $content = $response->getContent();
+        if ( $response instanceof JsonResponse ) {
+            $content = json_decode($content);
+        }
         
-        $response->setContent($newContent);
+        /*
+		 * Set the formel response
+		 */
+        $data = array(
+            'code'  => 0,
+            'data'  => $content
+        );
+        if (count($this->info) > 0) {
+            $data['info'] = $this->info;
+        }
+        
+        $event->setResponse(
+            $this->getResponse($data)
+        );
     }
     
 	/**
@@ -175,14 +152,16 @@ class XmlHttpRequestListener {
 	 * 
 	 * @param \Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent $event
 	 */
-    public function onKernelException(GetResponseForExceptionEvent $event)
-    {
+    public function onKernelException(GetResponseForExceptionEvent $event) {
         if ( !$this->isHandled() ) {
             return;
         }
-        $exception = $event->getException();
         
-		/**
+        $exception = $event->getException();
+		
+        $log = $exception->getMessage();
+        
+        /**
 		 * Default response error code
 		 */
         $code   = -1;
@@ -191,48 +170,57 @@ class XmlHttpRequestListener {
 		 * Default response error message
 		 */
         $error  = 'Erreur lors de l\'excecution du programme';
-        
+        $data = null;
 		/*
-		 * Check if $exception is an ErrorException with severity E_USER_ERROR, E_USER_WARNING or E_USER_NOTICE
+		 * Check if $exception implements XmlHttpRequestExceptionInterface
+         * Only Exception who implements XmlHttpRequestExceptionInterface are send to te client
 		 */
-        if ( $exception instanceof \ErrorException ) {
-        	if ( ($exception->getSeverity() & (E_USER_ERROR | E_USER_WARNING | E_USER_NOTICE)) != 0 ) {
-        		$code = $exception->getCode();
-				$error = $exception->getMessage();
-        	}
+        if ( $this->displayError || $exception instanceof XmlHttpRequestExceptionInterface ) {
+            if ($exception->getCode() > 0) {
+                $code = $exception->getCode();
+            }
+            $error = $exception->getMessage();
+            if ( $exception instanceof XmlHttpRequestExceptionInterface ) {
+                $data = $exception->getData();
+            }
         }
         
-		
-		/**
-		 * data response if an error occured during the process
-		 */
         $response = array(
             'code' => $code,
             'error'=> $error
         );
         
+        if ( $data !== null ) {
+            $response['data'] = $data;
+            $log .= PHP_EOL . json_encode($data);
+        }
+        
+        $this->logger->error( $log . PHP_EOL . $exception->getTraceAsString() );
+        
 		/*
 		 * Set the formel response
 		 */
         $event->setResponse(
-            new XmlHttpResponse(
-                $response,
-                $this->getAnnotation()->getType(),
-                $this->getAnnotation()->getStreaming()
-            )
+            $this->getResponse($response)
         );
+    }
+    
+    public function onInfo( EventInfo $event ) {
+        if ( !$this->isHandled() ) {
+            return;
+        }
+        
+        $this->info = array_merge($this->info, $event->getData());
     }
     
 	/**
 	 * This method is called when the emc.streaming.progress is trigged.
 	 * It's used for sending data to the client or simple informations.
 	 * 
-	 * @param \EMC\XmlHttpRequestBundle\Event\StreamingProgress $event
+	 * @param \EMC\XmlHttpRequestBundle\Event\EventStream $event
 	 */
-    public function onStreamingProgress( StreamingProgress $event )
-    {
-        if ( !$this->isHandled() || !$this->getAnnotation()->getStreaming() ) 
-        {
+    public function onStream( EventStream $event ) {
+        if ( !$this->isHandled('STREAM') ) {
             return;
         }
         
@@ -245,11 +233,22 @@ class XmlHttpRequestListener {
 			)
         );
 		
-		$response = new XmlHttpResponse(
-			$data,
-			$this->getAnnotation()->getType(),
-			$this->getAnnotation()->getStreaming()
-		);
-		$response->send();
+		$response = $this->getResponse( $data, $this->delemiter . PHP_EOL );
+        
+        if ( !headers_sent() ) {
+            $response->send();
+        } else {
+            $response->sendContent();
+        }
+        
+        flush();
+    }
+    
+    private function getResponse(array $data, $delemiter='') {
+        $response = new JsonResponse('', 200, array(self::HEADER_TAG => $this->delemiter));
+        $response->setEncodingOptions(JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT /*| JSON_FORCE_OBJECT*/ );
+        $response->setData($data);
+        $response->setContent($response->getContent() . $delemiter);
+        return $response;
     }
 }

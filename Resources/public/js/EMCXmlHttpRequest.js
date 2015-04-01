@@ -8,9 +8,16 @@ function EMCXmlHttpRequest() {
     }
 }
 
-EMCXmlHttpRequest.EVENT_STREAM_PROGRESS = 'emc.stream.progress';
-EMCXmlHttpRequest.EVENT_STREAM_SUCCESS = 'emc.stream.success';
-EMCXmlHttpRequest.EVENT_STREAM_ERROR = 'emc.stream.error';
+EMCXmlHttpRequest.HEADER_TAG = 'X-EMC-XmlHttpRequest';
+
+EMCXmlHttpRequest.STREAM_DELIMITER = "\n";
+
+EMCXmlHttpRequest.EVENT_STREAM_PROGRESS = 'emc.xmlhttprequest.stream.progress';
+EMCXmlHttpRequest.EVENT_STREAM_SUCCESS  = 'emc.xmlhttprequest.stream.success';
+EMCXmlHttpRequest.EVENT_STREAM_ERROR    = 'emc.xmlhttprequest.stream.error';
+EMCXmlHttpRequest.EVENT_INFO            = 'emc.xmlhttprequest.info';
+EMCXmlHttpRequest.EVENT_STREAM_UPLOAD   = 'emc.xmlhttprequest.stream.upload';
+EMCXmlHttpRequest.EVENT_STREAM_UPLOAD_DONE= 'emc.xmlhttprequest.stream.upload.done';
 
 EMCXmlHttpRequest.DATA_TYPE_JSON = 'JSON';
 EMCXmlHttpRequest.DATA_TYPE_JSONP = 'JSONP';
@@ -21,7 +28,6 @@ EMCXmlHttpRequest.DATA_TYPE_TEXT = 'TEXT';
 EMCXmlHttpRequest.METHOD_GET = 'GET';
 EMCXmlHttpRequest.METHOD_POST = 'POST';
 EMCXmlHttpRequest.METHOD_DELETE = 'DELETE';
-
 
 EMCXmlHttpRequest.ERROR_INVALID_RESPONSE = -1;
 EMCXmlHttpRequest.ERROR_REQUEST = -2;
@@ -52,6 +58,13 @@ EMCXmlHttpRequest.getInstance = function() {
     return this._instance;
 };
 
+
+EMCXmlHttpRequest.prototype.getHeaders = function(type) {
+    var headers = {};
+    headers[ EMCXmlHttpRequest.HEADER_TAG ] = type;
+    return headers;
+};
+
 EMCXmlHttpRequest.error = function(code, message) {
     throw new EMCXmlHttpRequestError(code, message);
 };
@@ -61,21 +74,20 @@ EMCXmlHttpRequest.prototype.checkResponse = function(response) {
             || response == null || typeof (response.code) != "number"
             || (response.code == 0 && typeof (response.data) == "undefined")
             || (response.code > 0 && typeof (response.error) != "string")
-            ) {
+    ) {
         EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_INVALID_RESPONSE, 'response is invalid');
     }
 };
 
 EMCXmlHttpRequest.prototype.execute = function(response, callback, dataType) {
+    
+    this.checkResponse(response);
+    var data = response.data;
 
-    var data = response;
-    if (dataType.toLowerCase() !== 'html') {
-        this.checkResponse(response);
-        data = response.data;
-    }
-
-    if (typeof (callback) == "function") {
-        return callback(data);
+    if (typeof (callback) === "function") {
+        try {
+            return callback(data, typeof(response.info) === "object" ? response.info : {});
+        } catch(error){}
     }
 
     return data;
@@ -98,7 +110,7 @@ EMCXmlHttpRequest.prototype.debug = function(xhr) {
     }
 };
 
-EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataType) {
+EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataType, headerTag) {
 
     if (typeof (method) !== "string" || EMCXmlHttpRequest.availableMethods.indexOf(method) < 0) {
         throw new Error('EMCXmlHttpRequest.ajax: Invalid Argument "method"');
@@ -116,6 +128,11 @@ EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataT
         throw new Error('EMCXmlHttpRequest.ajax: Invalid Argument "data"');
     }
 
+    var headers = this.getHeaders(method);
+    if ( typeof(headerTag) === "string" ) {
+        headers[headerTag] = 1;
+    }
+
     var result;
     var that = this;
     var request = $.ajax({
@@ -123,14 +140,19 @@ EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataT
         url: route,
         data: data,
         async: typeof (callback) === "function",
-        dataType: dataType,
+        dataType: EMCXmlHttpRequest.DATA_TYPE_JSON,
+        headers : headers,
         success: function(response, status, xhr) {
             try {
+                if ( xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null ) {
+                    throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
+                }
                 result = that.execute(response, callback, dataType);
+                
                 that.debug(xhr);
             }
             catch (error) {
-                EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error');
+                EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error : ' + error.message);
             }
         },
         error: function(xhr) {
@@ -142,71 +164,121 @@ EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataT
     return result;
 };
 
-EMCXmlHttpRequest.prototype.get = function(route, data, callback, dataType) {
-    return this.ajax(EMCXmlHttpRequest.METHOD_GET, route, data, callback, dataType);
+EMCXmlHttpRequest.prototype.get = function(route, data, callback, dataType, headerTag) {
+    return this.ajax(EMCXmlHttpRequest.METHOD_GET, route, data, callback, dataType, headerTag);
 };
 
-EMCXmlHttpRequest.prototype.post = function(route, data, callback, dataType) {
-    return this.ajax(EMCXmlHttpRequest.METHOD_POST, route, data, callback, dataType);
+EMCXmlHttpRequest.prototype.post = function(route, data, callback, dataType, headerTag) {
+    return this.ajax(EMCXmlHttpRequest.METHOD_POST, route, data, callback, dataType, headerTag);
 };
 
-EMCXmlHttpRequest.prototype.delete = function(route, data, callback, dataType) {
-    return this.ajax(EMCXmlHttpRequest.METHOD_DELETE, route, data, callback, dataType);
+EMCXmlHttpRequest.prototype.delete = function(route, data, callback, dataType, headerTag) {
+    return this.ajax(EMCXmlHttpRequest.METHOD_DELETE, route, data, callback, dataType, headerTag);
 };
 
-EMCXmlHttpRequest.prototype.stream = function(route, data, callback, method, context) {
+EMCXmlHttpRequest.prototype.stream = function(route, data, callback, method, context, params) {
 
     var that = this;
 
     var lastChunkLength = 0;
 
     var handlerCallback = function( response ) {
-        if (typeof (response) != "object" || typeof (response.code) != "number" || response.code > 0) {
+        if (typeof (response) !== "object" || typeof (response.code) !== "number") {
             EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_INVALID_RESPONSE, 'response is invalid');
         }
-
-        if (typeof (response.stream) == "object") {
-            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_PROGRESS, response.stream);
+        
+        if (response.code !== 0) {
+            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_ERROR, [response.code, response.error]);
+            EMCXmlHttpRequest.error(response.code, response.error);
         }
-        else if (typeof (response.data) == "object") {
-            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_SUCCESS, response.data);
+
+        if (typeof (response.stream) === "object") {
+            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_PROGRESS, [response.stream]);
+        }
+        else if (typeof (response.data) !== "undefined") {
+            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_SUCCESS, [response.data]);
             that.execute(response, callback, EMCXmlHttpRequest.DATA_TYPE_JSON);
         }
         
         return true;
     };
+    
+    if ( typeof(params) !== "object" ) {
+        params = {};
+    }
 
-    var request = $.ajax({
+    var request = $.ajax($.extend({
         type: method,
         url: route,
         data: data,
         async: true,
         dataType: EMCXmlHttpRequest.DATA_TYPE_TEXT,
+        headers : this.getHeaders('STREAM'),
+        xhr: function(){
+            // get the native XmlHttpRequest object
+            var xhr = $.ajaxSettings.xhr();
+            
+            // set the onprogress event handler
+            xhr.upload.onprogress = function(event){
+                $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_UPLOAD, [event.loaded*100/event.total]);
+            };
+            
+            // set the onload event handler
+            xhr.upload.onload = function(){
+                $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_UPLOAD_DONE);
+            };
+            
+            return xhr;
+        },
         xhrFields: {
             onprogress: function(event) {
                 try {
                     var data = event.target.responseText.substring(lastChunkLength, event.loaded);
                     
-                    var responses = data.split("\n").filter(function(item){return item.replace(" ", "").length>0;});
+                    if ( xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null ) {
+                        throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
+                    }
+                    var delimiter = event.target.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG);
+                    var responses = data.split(delimiter + "\n");
                     
                     for ( var response=0; response < responses.length; response++ ) {
-                        handlerCallback( $.parseJSON(responses[response]) );
+                        var json;
+                        try {
+                            json = $.parseJSON(responses[response]);
+                        } catch(error) {
+                            return;
+                        }
+                        handlerCallback( json );
                     }
                     
                     lastChunkLength = event.loaded;
                 }
                 catch (error) {
-                    $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_ERROR, 'Request Execution Error', error);
                     EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error');
                 }
             }
         },
+        success: function(response, status, xhr) {
+            try {
+                if ( xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null ) {
+                    throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
+                }
+                
+                $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_SUCCESS, [response.data]);
+                that.execute(response, callback, EMCXmlHttpRequest.DATA_TYPE_JSON);
+                
+                that.debug(xhr);
+            }
+            catch (error) {
+                EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error : ' + error.message);
+            }
+        },
         error: function(xhr) {
-            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_ERROR, 'Request Execution Error');
+            $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_ERROR, ['Request Execution Error']);
             that.debug(xhr);
             EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error');
         }
-    });
+    },params));
 };
 
 /****************************************************/
@@ -221,9 +293,10 @@ EMCXmlHttpRequest.prototype.stream = function(route, data, callback, method, con
  * @returns {EMCXmlHttpRequestError}
  */
 function EMCXmlHttpRequestError(code, message, data) {
-    Error.call(this, message);
+    Error.call(this);
     this.code = code;
     this.data = data;
+    this.message = message;
 }
 
 EMCXmlHttpRequestError.prototype = Error.prototype;
