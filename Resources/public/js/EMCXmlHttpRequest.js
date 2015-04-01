@@ -3,7 +3,7 @@
  */
 
 function EMCXmlHttpRequest() {
-    if ( EMCXmlHttpRequest.caller != EMCXmlHttpRequest.getInstance ) {
+    if (EMCXmlHttpRequest.caller != EMCXmlHttpRequest.getInstance) {
         throw new Error('EMCXmlHttpRequest can\'t be instanciated')
     }
 }
@@ -13,11 +13,11 @@ EMCXmlHttpRequest.HEADER_TAG = 'X-EMC-XmlHttpRequest';
 EMCXmlHttpRequest.STREAM_DELIMITER = "\n";
 
 EMCXmlHttpRequest.EVENT_STREAM_PROGRESS = 'emc.xmlhttprequest.stream.progress';
-EMCXmlHttpRequest.EVENT_STREAM_SUCCESS  = 'emc.xmlhttprequest.stream.success';
-EMCXmlHttpRequest.EVENT_STREAM_ERROR    = 'emc.xmlhttprequest.stream.error';
-EMCXmlHttpRequest.EVENT_INFO            = 'emc.xmlhttprequest.info';
-EMCXmlHttpRequest.EVENT_STREAM_UPLOAD   = 'emc.xmlhttprequest.stream.upload';
-EMCXmlHttpRequest.EVENT_STREAM_UPLOAD_DONE= 'emc.xmlhttprequest.stream.upload.done';
+EMCXmlHttpRequest.EVENT_STREAM_SUCCESS = 'emc.xmlhttprequest.stream.success';
+EMCXmlHttpRequest.EVENT_STREAM_ERROR = 'emc.xmlhttprequest.stream.error';
+EMCXmlHttpRequest.EVENT_INFO = 'emc.xmlhttprequest.info';
+EMCXmlHttpRequest.EVENT_STREAM_UPLOAD = 'emc.xmlhttprequest.stream.upload';
+EMCXmlHttpRequest.EVENT_STREAM_UPLOAD_DONE = 'emc.xmlhttprequest.stream.upload.done';
 
 EMCXmlHttpRequest.DATA_TYPE_JSON = 'JSON';
 EMCXmlHttpRequest.DATA_TYPE_JSONP = 'JSONP';
@@ -74,20 +74,21 @@ EMCXmlHttpRequest.prototype.checkResponse = function(response) {
             || response == null || typeof (response.code) != "number"
             || (response.code == 0 && typeof (response.data) == "undefined")
             || (response.code > 0 && typeof (response.error) != "string")
-    ) {
+            ) {
         EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_INVALID_RESPONSE, 'response is invalid');
     }
 };
 
 EMCXmlHttpRequest.prototype.execute = function(response, callback, dataType) {
-    
+
     this.checkResponse(response);
     var data = response.data;
 
     if (typeof (callback) === "function") {
         try {
-            return callback(data, typeof(response.info) === "object" ? response.info : {});
-        } catch(error){}
+            return callback(data, typeof (response.info) === "object" ? response.info : {});
+        } catch (error) {
+        }
     }
 
     return data;
@@ -129,7 +130,7 @@ EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataT
     }
 
     var headers = this.getHeaders(method);
-    if ( typeof(headerTag) === "string" ) {
+    if (typeof (headerTag) === "string") {
         headers[headerTag] = 1;
     }
 
@@ -141,14 +142,14 @@ EMCXmlHttpRequest.prototype.ajax = function(method, route, data, callback, dataT
         data: data,
         async: typeof (callback) === "function",
         dataType: EMCXmlHttpRequest.DATA_TYPE_JSON,
-        headers : headers,
+        headers: headers,
         success: function(response, status, xhr) {
             try {
-                if ( xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null ) {
+                if (xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null) {
                     throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
                 }
                 result = that.execute(response, callback, dataType);
-                
+
                 that.debug(xhr);
             }
             catch (error) {
@@ -182,11 +183,11 @@ EMCXmlHttpRequest.prototype.stream = function(route, data, callback, method, con
 
     var lastChunkLength = 0;
 
-    var handlerCallback = function( response ) {
+    var handlerCallback = function(response) {
         if (typeof (response) !== "object" || typeof (response.code) !== "number") {
             EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_INVALID_RESPONSE, 'response is invalid');
         }
-        
+
         if (response.code !== 0) {
             $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_ERROR, [response.code, response.error]);
             EMCXmlHttpRequest.error(response.code, response.error);
@@ -199,11 +200,39 @@ EMCXmlHttpRequest.prototype.stream = function(route, data, callback, method, con
             $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_SUCCESS, [response.data]);
             that.execute(response, callback, EMCXmlHttpRequest.DATA_TYPE_JSON);
         }
-        
+
         return true;
     };
-    
-    if ( typeof(params) !== "object" ) {
+
+    var onProgress = function(response, xhr, length) {
+        try {
+            response = response.substring(lastChunkLength, length);
+
+            var delimiter = xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG);
+
+            if (delimiter === null) {
+                throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
+            }
+
+            var responses = response.split(delimiter + "\n");
+            for (var i = 0; i < responses.length; i++) {
+                var _response = null;
+                try {
+                    _response = $.parseJSON(responses[i]);
+                    lastChunkLength += responses[i].length + delimiter.length + 1;
+                } catch (error) {
+                    return;
+                }
+
+                handlerCallback(_response);
+            }
+
+        } catch (error) {
+            EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error : ' + error.message);
+        }
+    };
+
+    if (typeof (params) !== "object") {
         params = {};
     }
 
@@ -213,72 +242,40 @@ EMCXmlHttpRequest.prototype.stream = function(route, data, callback, method, con
         data: data,
         async: true,
         dataType: EMCXmlHttpRequest.DATA_TYPE_TEXT,
-        headers : this.getHeaders('STREAM'),
-        xhr: function(){
+        headers: this.getHeaders('STREAM'),
+        xhr: function() {
             // get the native XmlHttpRequest object
             var xhr = $.ajaxSettings.xhr();
-            
+
             // set the onprogress event handler
-            xhr.upload.onprogress = function(event){
-                $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_UPLOAD, [event.loaded*100/event.total]);
+            xhr.upload.onprogress = function(event) {
+                $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_UPLOAD, [event.loaded * 100 / event.total]);
             };
-            
+
             // set the onload event handler
-            xhr.upload.onload = function(){
+            xhr.upload.onload = function() {
                 $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_UPLOAD_DONE);
             };
-            
+
+            xhr.upload.onloadend = xhr.upload.onload;
+
             return xhr;
         },
         xhrFields: {
             onprogress: function(event) {
-                try {
-                    var data = event.target.responseText.substring(lastChunkLength, event.loaded);
-                    
-                    if ( xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null ) {
-                        throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
-                    }
-                    var delimiter = event.target.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG);
-                    var responses = data.split(delimiter + "\n");
-                    
-                    for ( var response=0; response < responses.length; response++ ) {
-                        var json;
-                        try {
-                            json = $.parseJSON(responses[response]);
-                        } catch(error) {
-                            return;
-                        }
-                        handlerCallback( json );
-                    }
-                    
-                    lastChunkLength = event.loaded;
-                }
-                catch (error) {
-                    EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error');
-                }
+                onProgress(event.target.responseText, event.target, event.loaded);
             }
         },
         success: function(response, status, xhr) {
-            try {
-                if ( xhr.getResponseHeader(EMCXmlHttpRequest.HEADER_TAG) === null ) {
-                    throw new Error('Response not valid : "' + EMCXmlHttpRequest.HEADER_TAG + '" header tag not found');
-                }
-                
-                $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_SUCCESS, [response.data]);
-                that.execute(response, callback, EMCXmlHttpRequest.DATA_TYPE_JSON);
-                
-                that.debug(xhr);
-            }
-            catch (error) {
-                EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error : ' + error.message);
-            }
+            onProgress(response, xhr, response.length);
+            that.debug(xhr);
         },
         error: function(xhr) {
             $(context).trigger(EMCXmlHttpRequest.EVENT_STREAM_ERROR, ['Request Execution Error']);
             that.debug(xhr);
             EMCXmlHttpRequest.error(EMCXmlHttpRequest.ERROR_REQUEST, 'Request Execution Error');
         }
-    },params));
+    }, params));
 };
 
 /****************************************************/
