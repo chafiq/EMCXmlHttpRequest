@@ -1,0 +1,22 @@
+parameters:
+    emc.xml_http_request.listener.class: EMC\XmlHttpRequestBundle\Listener\XmlHttpRequestListener
+    emc.xml_http_request.extension.class: EMC\XmlHttpRequestBundle\Twig\XmlHttpRequestExtension
+    emc.xml_http_request.listener.display_error: false
+
+services:
+    emc.xml_http_request.listener:
+        class: %emc.xml_http_request.listener.class%
+        arguments: [@logger, %emc.xml_http_request.listener.display_error%]
+        calls:
+            - [setRequest, [@request_stack]]
+        tags:
+            - { name: kernel.event_listener, event: kernel.response, method: onKernelResponse }
+            - { name: kernel.event_listener, event: kernel.exception, method: onKernelException }
+            - { name: kernel.event_listener, event: emc.xmlhttprequest.stream, method: onStream }
+            - { name: kernel.event_listener, event: emc.xmlhttprequest.info, method: onInfo }
+            
+    emc.xml_http_request.extension:
+        class: %emc.xml_http_request.extension.class%
+        arguments: [ @annotation_reader, @router ]
+        tags:
+            - { name : twig.extension }

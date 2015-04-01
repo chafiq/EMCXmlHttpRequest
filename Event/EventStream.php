@@ -5,13 +5,13 @@ namespace EMC\XmlHttpRequestBundle\Event;
 use Symfony\Component\EventDispatcher\Event;
 
 /**
- * StreamingProgress is an event who can be dispatch during an action who may take a long time.
+ * EventStream is an event who can be dispatch during an action who may take a long time.
  * It's binded during a XmlHttpRequest by adding the XmlHttpRequest annotation in the controller action.
  * Make sure that the parameter "streaming=true" is set in the annotation.
  *
  * @author Chafiq El Mechrafi  <chafiq.elmechrafi@gmail.com>
  */
-class StreamingProgress extends Event {
+class EventStream extends Event {
     
     /**
      * Progression level percent (%)
@@ -53,7 +53,7 @@ class StreamingProgress extends Event {
 	/**
 	 * Set the progression value %
 	 * @param int $percent
-	 * @return \EMC\XmlHttpRequestBundle\Event\StreamingProgress
+	 * @return \EMC\XmlHttpRequestBundle\Event\EventStream
 	 */
     public function setPercent($percent) {
         $this->percent = $percent;
@@ -71,7 +71,7 @@ class StreamingProgress extends Event {
 	/**
 	 * Set the progression message
 	 * @param string $message
-	 * @return \EMC\XmlHttpRequestBundle\Event\StreamingProgress
+	 * @return \EMC\XmlHttpRequestBundle\Event\EventStream
 	 */
     public function setMessage($message) {
         $this->message = $message;
@@ -89,7 +89,7 @@ class StreamingProgress extends Event {
 	/**
 	 * Set the data progression content
 	 * @param mixed $data
-	 * @return \EMC\XmlHttpRequestBundle\Event\StreamingProgress
+	 * @return \EMC\XmlHttpRequestBundle\Event\EventStream
 	 */
 	public function setData($data) {
 		$this->data = $data;
